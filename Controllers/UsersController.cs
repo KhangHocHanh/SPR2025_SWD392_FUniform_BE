@@ -1,7 +1,14 @@
 ﻿using ClothingCustomization.Data;
 using ClothingCustomization.DTO;
 using ClothingCustomization.Repository;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+
 
 namespace ClothingCustomization.Controllers
 {
@@ -11,11 +18,13 @@ namespace ClothingCustomization.Controllers
     {
         private readonly IUserRepository _userRepo;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IConfiguration _configuration;
 
-        public UsersController(IUserRepository userRepo, IHttpContextAccessor httpContextAccessor)
+        public UsersController(IUserRepository userRepo, IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
         {
             _userRepo = userRepo;
             _httpContextAccessor = httpContextAccessor;
+            _configuration = configuration;
         }
 
         [HttpPost]
@@ -64,7 +73,42 @@ namespace ClothingCustomization.Controllers
             {
                 // Store user in session
                 _httpContextAccessor.HttpContext.Session.SetInt32("UserId", user.UserId);
-                return Ok(user);
+
+                var claims = new[]
+                {
+                    new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                    new Claim("UserId",user.UserId.ToString()),
+                    new Claim(ClaimTypes.Role, user.Role.RoleName.ToLower())  // Store Role in Token
+                };
+                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+                var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+                var token = new JwtSecurityToken(
+                    _configuration["Jwt:Issuer"],
+                    _configuration["Jwt:Audience"],
+                    claims,
+                    expires: DateTime.UtcNow.AddMinutes(30),
+                    signingCredentials: signIn
+                    );
+
+                string tokenValue = new JwtSecurityTokenHandler().WriteToken(token);
+
+                // map to watch information
+                var userDto = new 
+                {
+                    Username = user.Username,
+                    Password = user.Password,
+                    FullName = user.FullName,
+                    Gender = user.Gender,
+                    DateOfBirth = user.DateOfBirth,
+                    Address = user.Address,
+                    Phone = user.Phone,
+                    Email = user.Email,
+                    RoleId = user.RoleId,
+                    IsDeleted = user.IsDeleted,
+                };
+                return Ok(new { Token = tokenValue, User = userDto } );
+                //return Ok(new { Role = user.Role?.RoleName, Message = "Debugging Role Value" });
             }
             return NoContent();
         }
@@ -91,6 +135,7 @@ namespace ClothingCustomization.Controllers
             return Ok(await _userRepo.GetUsers());
         }
 
+        [Authorize(Roles = "admin")]
         [HttpGet]
         [Route("GetUser/{id}")]
         public async Task<IActionResult> GetUser(int id)
