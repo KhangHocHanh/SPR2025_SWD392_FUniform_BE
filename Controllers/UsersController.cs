@@ -1,6 +1,7 @@
 ﻿using ClothingCustomization.Data;
 using ClothingCustomization.DTO;
 using ClothingCustomization.Repository;
+using ClothingCustomization.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,16 +18,16 @@ namespace ClothingCustomization.Controllers
     public class UsersController : ControllerBase
     {
         private readonly IUserRepository _userRepo;
-        private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IConfiguration _configuration;
-
-        public UsersController(IUserRepository userRepo, IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
+        private readonly JwtService _jwtService;
+        public UsersController(IUserRepository userRepo, IConfiguration configuration, JwtService jwtService)
         {
             _userRepo = userRepo;
-            _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
+            _jwtService = jwtService;
         }
 
+        #region Authentication & Authorization
         [HttpPost]
         [Route("Registration")]
         public async Task<IActionResult> Registration([FromQuery] UserDTO userDto)
@@ -40,7 +41,7 @@ namespace ClothingCustomization.Controllers
             var existingUser = (await _userRepo.GetUsers()).FirstOrDefault(x => x.Username == userDto.Username);
             if (existingUser != null)
             {
-                return BadRequest("Tai khoan nay da su dung");
+                return BadRequest("This account name has been used");
             }
 
 
@@ -71,27 +72,7 @@ namespace ClothingCustomization.Controllers
             var user = await _userRepo.Login(taikhoan, matkhau);
             if (user != null)
             {
-                // Store user in session
-                _httpContextAccessor.HttpContext.Session.SetInt32("UserId", user.UserId);
-
-                var claims = new[]
-                {
-                    new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                    new Claim("UserId",user.UserId.ToString()),
-                    new Claim(ClaimTypes.Role, user.Role.RoleName.ToLower())  // Store Role in Token
-                };
-                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-                var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-                var token = new JwtSecurityToken(
-                    _configuration["Jwt:Issuer"],
-                    _configuration["Jwt:Audience"],
-                    claims,
-                    expires: DateTime.UtcNow.AddMinutes(30),
-                    signingCredentials: signIn
-                    );
-
-                string tokenValue = new JwtSecurityTokenHandler().WriteToken(token);
+                string tokenValue = _jwtService.GenerateToken(user.UserId, user.Role.RoleName);
 
                 // map to watch information
                 var userDto = new 
@@ -117,17 +98,14 @@ namespace ClothingCustomization.Controllers
         [Route("Logout")]
         public IActionResult Logout()
         {
-            var userId = _httpContextAccessor.HttpContext.Session.GetInt32("UserId");
-
-            if (userId == null)
-            {
-                return BadRequest(new { Message = "You are not login" });
-            }
-
-            _httpContextAccessor.HttpContext.Session.Clear();
             return Ok(new { Message = "Logout successfully" });
         }
 
+        #endregion
+
+
+        #region User Management
+        [Authorize(Roles = "admin")]
         [HttpGet]
         [Route("GetUsers")]
         public async Task<IActionResult> GetUsers()
@@ -135,17 +113,50 @@ namespace ClothingCustomization.Controllers
             return Ok(await _userRepo.GetUsers());
         }
 
-        [Authorize(Roles = "admin")]
+        [Authorize]
         [HttpGet]
-        [Route("GetUser/{id}")]
-        public async Task<IActionResult> GetUser(int id)
+        [Route("GetUsers/{id}")]
+        public async Task<IActionResult> GetUsers(int id)
         {
+            var currentUserId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
             var user = await _userRepo.GetUserById(id);
-            if (user != null)
+
+            var userDto = new
             {
-                return Ok(user);
+                Username = user.Username,
+                Password = user.Password,
+                FullName = user.FullName,
+                Gender = user.Gender,
+                DateOfBirth = user.DateOfBirth,
+                Address = user.Address,
+                Phone = user.Phone,
+                Email = user.Email,
+                RoleId = user.RoleId,
+                IsDeleted = user.IsDeleted,
+            };
+            if (user == null)
+            {
+                return NoContent();
             }
-            return NoContent();
+
+            if (currentUserRole == "admin" || currentUserId == id)
+            {
+                // Admins can see all, users can see their own account
+                return Ok(new { User = userDto });
+            }
+
+            if (currentUserRole == "staff" && user.Role.RoleName.ToLower() != "admin")
+            {
+                // Staff can see everyone EXCEPT admins
+                return Ok(new { User = userDto });
+            }
+
+            return Forbid();
         }
+        #endregion 
+
+
     }
 }

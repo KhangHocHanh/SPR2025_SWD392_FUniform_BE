@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using ClothingCustomization.Services;
 
 namespace ClothingCustomization
 {
@@ -69,17 +70,18 @@ namespace ClothingCustomization
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = builder.Configuration["Jwt:Issuer"],
                     ValidAudience = builder.Configuration["Jwt:Audience"],
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
                 };
             });
             builder.Services.AddAuthorization();
 
             // Dependence Injection
             builder.Services.AddScoped<IUserRepository, UserRepository>();
+            builder.Services.AddScoped<JwtService>();
 
             // Session
-            builder.Services.AddDistributedMemoryCache();
-            builder.Services.AddSession();
+            // builder.Services.AddDistributedMemoryCache();
+            // builder.Services.AddSession();
 
             // Inject IHttpContextAccessor in UserController
             builder.Services.AddHttpContextAccessor();
@@ -105,7 +107,7 @@ namespace ClothingCustomization
 
             app.UseAuthorization();
 
-            app.UseSession();
+            // app.UseSession();
 
             app.MapControllers();
 

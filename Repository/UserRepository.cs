@@ -26,7 +26,7 @@ namespace ClothingCustomization.Repository
 
         public async Task<User?> GetUserById(int id)
         {
-            return await _context.Users.FirstOrDefaultAsync(u => u.UserId == id);
+            return await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == id);
         }
 
         public async Task<List<User>> GetUsers()
