@@ -2,6 +2,8 @@
 using ClothingCustomization.DTO;
 using ClothingCustomization.Repository;
 using ClothingCustomization.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Diagnostics.Contracts;
 
 
 namespace ClothingCustomization.Controllers
@@ -65,36 +68,71 @@ namespace ClothingCustomization.Controllers
             return Ok(new { Message = "Account register successfully", UserId = newUser.UserId });
         }
 
+        //[HttpPost]
+        //[Route("Login")]
+        //public async Task<IActionResult> Login(string taikhoan, string matkhau)
+        //{
+        //    var user = await _userRepo.Login(taikhoan, matkhau);
+        //    if (user != null)
+        //    {
+        //        string tokenValue = _jwtService.GenerateToken(user.UserId, user.Role.RoleName);
+
+        //        // map to watch information
+        //        var userDto = new 
+        //        {
+        //            Username = user.Username,
+        //            Password = user.Password,
+        //            FullName = user.FullName,
+        //            Gender = user.Gender,
+        //            DateOfBirth = user.DateOfBirth,
+        //            Address = user.Address,
+        //            Phone = user.Phone,
+        //            Email = user.Email,
+        //            RoleId = user.RoleId,
+        //            IsDeleted = user.IsDeleted,
+        //        };
+        //        return Ok(new { Token = tokenValue, User = userDto } );
+        //        //return Ok(new { Role = user.Role?.RoleName, Message = "Debugging Role Value" });
+        //    }
+        //    return NoContent();
+        //}
         [HttpPost]
         [Route("Login")]
-        public async Task<IActionResult> Login(string taikhoan, string matkhau)
+        public IActionResult Login([FromBody] LoginRequest login)
         {
-            var user = await _userRepo.Login(taikhoan, matkhau);
-            if (user != null)
-            {
-                string tokenValue = _jwtService.GenerateToken(user.UserId, user.Role.RoleName);
+            var user = _userRepo.Login(login.UserName, login.Password);
+            if (user == null || user.Result == null)
+                return Unauthorized();
 
-                // map to watch information
-                var userDto = new 
-                {
-                    Username = user.Username,
-                    Password = user.Password,
-                    FullName = user.FullName,
-                    Gender = user.Gender,
-                    DateOfBirth = user.DateOfBirth,
-                    Address = user.Address,
-                    Phone = user.Phone,
-                    Email = user.Email,
-                    RoleId = user.RoleId,
-                    IsDeleted = user.IsDeleted,
-                };
-                return Ok(new { Token = tokenValue, User = userDto } );
-                //return Ok(new { Role = user.Role?.RoleName, Message = "Debugging Role Value" });
-            }
-            return NoContent();
+            var token = GenerateJSONWebToken(user.Result);
+
+            return Ok(token);
         }
+        private string GenerateJSONWebToken(User userAccount)
+        {
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        [HttpPost]
+            var token = new JwtSecurityToken(_configuration["Jwt:Issuer"]
+                    , _configuration["Jwt:Audience"]
+                    , new Claim[]
+                    {
+                new(ClaimTypes.Email, userAccount.Email),
+                //new(ClaimTypes.Email, systemUserAccount.Email),
+                new(ClaimTypes.Role, userAccount.RoleId.ToString()),
+                    },
+                    expires: DateTime.Now.AddMinutes(120),
+                    signingCredentials: credentials
+                );
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+            return tokenString;
+        }
+        public sealed record LoginRequest(string UserName, string Password);
+
+       
+            [HttpPost]
         [Route("Logout")]
         public IActionResult Logout()
         {
@@ -108,9 +146,9 @@ namespace ClothingCustomization.Controllers
         [Authorize(Roles = "admin")]
         [HttpGet]
         [Route("Users")]
-        public async Task<IActionResult> GetUsers()
+        public async Task<IEnumerable<User>> GetUsers()
         {
-            return Ok(await _userRepo.GetUsers());
+            return await _userRepo.GetUsers();
         }
 
         [Authorize]
