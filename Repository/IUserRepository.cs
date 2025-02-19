@@ -1,4 +1,5 @@
 ﻿using ClothingCustomization.Data;
+using ClothingCustomization.DTO;
 
 namespace ClothingCustomization.Repository
 {
@@ -8,6 +9,6 @@ namespace ClothingCustomization.Repository
         Task<User> Register(User user);
         Task<User?> GetUserById(int id);
         Task<List<User>> GetUsers();
-
+        Task<User?> UpdateUser(User user);
     }
 }

@@ -13,7 +13,7 @@ using System.Text;
 
 namespace ClothingCustomization.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api")]
     [ApiController]
     public class UsersController : ControllerBase
     {
@@ -107,7 +107,7 @@ namespace ClothingCustomization.Controllers
         #region User Management
         [Authorize(Roles = "admin")]
         [HttpGet]
-        [Route("GetUsers")]
+        [Route("Users")]
         public async Task<IActionResult> GetUsers()
         {
             return Ok(await _userRepo.GetUsers());
@@ -115,7 +115,7 @@ namespace ClothingCustomization.Controllers
 
         [Authorize]
         [HttpGet]
-        [Route("GetUsers/{id}")]
+        [Route("Users/{id}")]
         public async Task<IActionResult> GetUsers(int id)
         {
             var currentUserId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
@@ -136,6 +136,7 @@ namespace ClothingCustomization.Controllers
                 RoleId = user.RoleId,
                 IsDeleted = user.IsDeleted,
             };
+
             if (user == null)
             {
                 return NoContent();
@@ -147,14 +148,97 @@ namespace ClothingCustomization.Controllers
                 return Ok(new { User = userDto });
             }
 
-            if (currentUserRole == "staff" && user.Role.RoleName.ToLower() != "admin")
+            if (currentUserRole == "staff" && user.Role.RoleName.ToLower() == "member")
             {
-                // Staff can see everyone EXCEPT admins
+                // Staff can see only member
                 return Ok(new { User = userDto });
             }
 
             return Forbid();
         }
+
+        
+        [HttpPut]
+        [Route("Users/{id}")]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDTO user)
+        {
+            var currentUserId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            var userUpdate = await _userRepo.GetUserById(id);
+            if (user == null)
+            {
+                return NotFound("User not found.");
+            }
+            //if (currentUserRole == "admin" || currentUserId == id)
+           // {
+                userUpdate.FullName = user.FullName;
+                userUpdate.Gender = user.Gender;
+                userUpdate.DateOfBirth = user.DateOfBirth;
+                userUpdate.Address = user.Address;
+                userUpdate.Phone = user.Phone;
+                userUpdate.Email = user.Email;
+                userUpdate.Avatar = user.Avatar;
+
+
+                await _userRepo.UpdateUser(userUpdate);
+                return Ok(new { Message = "User updated successfully." });
+           // }
+
+           // return Forbid();
+        }
+
+        [HttpPut]
+        [Route("Users/{id}/Password")]
+        public async Task<IActionResult> ChangePassword(int id, [FromQuery] ChangePasswordDTO changePasswordDto)
+        {
+            var currentUserId = int.Parse(User.FindFirst("UserId")?.Value ?? "0");
+            var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            var user = await _userRepo.GetUserById(id);
+            if (user == null) return NotFound(new { Message = "User not found" });
+
+           // if (currentUserRole == "admin" || currentUserId == id)
+          //  {
+                if (user.Password != changePasswordDto.OldPassword)
+                {
+                    return BadRequest(new { Message = "Old password is incorrect." });
+                }
+
+                user.Password = changePasswordDto.NewPassword;
+                await _userRepo.UpdateUser(user);
+                return Ok(new { Message = "✅ Password changed successfully." });
+         //   }
+         //   return Forbid();
+        }
+
+        
+        [HttpDelete]
+        [Route("Users/{id}")]
+        public async Task<IActionResult> DeactivateUser(int id)
+        {
+            var user = await _userRepo.GetUserById(id);
+            if (user == null) return NotFound(new { Message = "User not found" });
+            if (user.IsDeleted == true) return BadRequest(new { Message = "User has been deleted" });
+
+            user.IsDeleted = true;
+            await _userRepo.UpdateUser(user);
+            return Ok(new { Message = "User deactivated successfully." });
+        }
+
+        [HttpPut]
+        [Route("Users/{id}/Recovery")]
+        public async Task<IActionResult> RecoverUser(int id)
+        {
+            var user = await _userRepo.GetUserById(id);
+            if (user == null) return NotFound(new { Message = "User not found" });
+            if (user.IsDeleted == false) return BadRequest(new { Message = "User has been existing" });
+
+            user.IsDeleted = false;
+            await _userRepo.UpdateUser(user);
+            return Ok(new { Message = "User recovered successfully." });
+        }
+
         #endregion 
 
 

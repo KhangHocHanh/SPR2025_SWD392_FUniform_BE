@@ -12,19 +12,20 @@ namespace ClothingCustomization.Controllers
             _context = context;
         }
 
+        /*
         [HttpGet]
-        [Route("GetUser")]
-        public IActionResult GetUser(int id)
+        [Route("Roles")]
+        public IActionResult GetRoles()
         {
-            var user = _context.Users.FirstOrDefault(x => x.UserId == id);
-            if (user != null)
-            {
-                return Ok(user);
-            }
-            else
-            {
-                return NoContent();
-            }
+            
         }
+
+        [HttpGet]
+        [Route("Roles/{id}")]
+        public IActionResult GetRoles(int id)
+        {
+            
+        }
+        */
     }
 }

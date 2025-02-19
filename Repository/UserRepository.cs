@@ -1,5 +1,7 @@
 ﻿using ClothingCustomization.Data;
+using ClothingCustomization.DTO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ClothingCustomization.Repository
 {
@@ -14,7 +16,9 @@ namespace ClothingCustomization.Repository
 
         public async Task<User> Login(string taikhoan, string matkhau)
         {
-            return await _context.Users.Include(x => x.Role).FirstOrDefaultAsync(u => u.Username == taikhoan && u.Password == matkhau);
+            return await _context.Users
+                .Include(x => x.Role)
+                .FirstOrDefaultAsync(u => u.Username == taikhoan && u.Password == matkhau);
         }
 
         public async Task<User> Register(User user)
@@ -26,12 +30,22 @@ namespace ClothingCustomization.Repository
 
         public async Task<User?> GetUserById(int id)
         {
-            return await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == id);
+            return await _context.Users
+                .Include(u => u.Role)
+                .FirstOrDefaultAsync(u => u.UserId == id);
         }
 
         public async Task<List<User>> GetUsers()
         {
             return await _context.Users.ToListAsync();
         }
+
+        public async Task<User?> UpdateUser(User user)
+        {
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
+            return user;
+        }
+
     }
 }
